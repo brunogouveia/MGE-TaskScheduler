@@ -22,7 +22,7 @@ void FiberContext::CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* para
 	fiber.CreateFromCurrentThreadAndRun(fiberFunc, params);
 }
 
-void FiberContext::WaitForCounterAndFree(TaskCounter& taskCounter, uint32_t value)
+void FiberContext::WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value)
 {
 	TaskScheduler* taskScheduler = threadContext->taskScheduler;
 

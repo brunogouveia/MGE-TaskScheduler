@@ -49,7 +49,7 @@ public:
 		RunTaskImpl(taskDescriptions, numTasks, taskCounter);
 	}
 
-	void WaitForCounterAndFree(TaskCounter& taskCounter, uint32_t value);
+	void WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value);
 
 	Fiber fiber;
 	FiberContextState state = FiberContextState::IDLE;

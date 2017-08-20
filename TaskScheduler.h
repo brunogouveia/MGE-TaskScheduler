@@ -70,8 +70,8 @@ public:
 		RunTaskImpl(taskDescriptions, numTasks, taskCounter);
 	}
 
-	void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter& counter, uint32_t value);
-	void WaitForCounterAndFree(TaskCounter& counter, uint32_t value);
+	void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value);
+	void WaitForCounterAndFree(TaskCounter* counter, uint32_t value);
 	void WaitAllTasks();
 
 //private:

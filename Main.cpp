@@ -45,7 +45,7 @@ public:
 		TaskCounter* taskCounter;
 
 		context.RunTask(subTasks, 10, &taskCounter);
-		context.WaitForCounterAndFree(*taskCounter, 0);
+		context.WaitForCounterAndFree(taskCounter, 0);
 
 		std::cout << "Test - done" << std::endl;
 	}
@@ -144,7 +144,7 @@ int main()
 	taskScheduler.RunTask(tasks, 1, &counter);
 
 	//taskScheduler.WaitAllTasks();
-	taskScheduler.WaitForCounterAndFree(*counter, 0);
+	taskScheduler.WaitForCounterAndFree(counter, 0);
 
 	system("pause");
 

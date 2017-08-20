@@ -34,14 +34,14 @@ TaskScheduler::~TaskScheduler()
 	}
 }
 
-void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter& counter, uint32_t value)
+void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value)
 {
-	assert(counter.onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
+	assert(counter->onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
 
 	// TODO - DELETE COUNTER
 
 	// Set complete action to move fiber to wakeup list.
-	counter.onCompleteAction = [this, &fiberContext]()
+	counter->onCompleteAction = [this, &fiberContext]()
 	{
 		MoveFiberToWakeupList(fiberContext);
 	};
@@ -50,9 +50,9 @@ void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounte
 	MoveFiberToWaitList(fiberContext);
 }
 
-void TaskScheduler::WaitForCounterAndFree(TaskCounter& counter, uint32_t value)
+void TaskScheduler::WaitForCounterAndFree(TaskCounter* counter, uint32_t value)
 {
-	assert(counter.onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
+	assert(counter->onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
 
 	static std::mutex schedulerThreadMutex;
 	static std::condition_variable schedulerThreadCV;
@@ -60,7 +60,7 @@ void TaskScheduler::WaitForCounterAndFree(TaskCounter& counter, uint32_t value)
 
 	doneWaiting = false;
 
-	counter.onCompleteAction = [&]()
+	counter->onCompleteAction = [&]()
 	{
 		std::unique_lock<std::mutex> lock(schedulerThreadMutex);
 		doneWaiting = true;
