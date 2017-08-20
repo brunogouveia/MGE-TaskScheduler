@@ -22,18 +22,32 @@ public:
 	virtual bool step() = 0;
 };
 
-class TaskExample
+class SubTaskExample
 {
 public:
-	static void TaskEntryPoint(void* params, FiberContext& context)
-	{
-		static_cast<TaskExample*>(params)->Do(context);
-	}
+	MGE_DECLARE_TASK(SubTaskExample)
 
 	void Do(FiberContext& context)
 	{
-		//std::cout << "Test" << std::endl;
-		puts("Test");
+		puts("SubTaskExample");
+	}
+};
+
+class TaskExample
+{
+public:
+	MGE_DECLARE_TASK(TaskExample)
+
+	void Do(FiberContext& context)
+	{
+		std::cout << "Test" << std::endl;
+		SubTaskExample subTasks[10];
+		TaskCounter* taskCounter;
+
+		context.RunTask(subTasks, 10, &taskCounter);
+		context.WaitForCounterAndFree(*taskCounter, 0);
+
+		std::cout << "Test - done" << std::endl;
 	}
 };
 
@@ -118,44 +132,19 @@ void threadFoo(void* param)
 	std::cout << "Thread foo" << std::endl;
 }
 
-#include <thread>
 int main()
 {
-	//auto coroutine = std::make_shared<FiberCoroutine>();
-	//coroutine->setup2();
-	//std::thread ttest([&]() {
-	//	coroutine->setup([](Coroutine::Yield yield)
-	//	{
-	//		for (int i = 0; i < 3; ++i)
-	//		{
-	//			std::cout << "Coroutine "
-	//				<< i << std::endl;
-	//			yield();
-	//		}
-	//	});
-	//	//coroutine->setup([](Coroutine::Yield yield)
-	//	//{
-	//	//	const char test[10000] = {0};
-	//	//	TaskScheduler::FiberMainFunc(nullptr);
-	//	//});
-
-	//	int stepCount = 0;
-	//	while (coroutine->step())
-	//	{
-	//		std::cout << "Main "
-	//			<< stepCount++ << std::endl;
-	//	}
-	//});
-
 	ThreadContext threadContext;
 	threadContext.Start(&threadFoo);
 
-	TaskScheduler taskScheduler(2);
+	TaskScheduler taskScheduler;
 
-	TaskExample tasks[10];
-	taskScheduler.RunTask(tasks, 10);
-	//auto example = TaskExample::CreateParams(2, 10.0f);
-	while (true) {}
+	TaskExample tasks[1];
+	TaskCounter* counter = nullptr;
+	taskScheduler.RunTask(tasks, 1, &counter);
+
+	//taskScheduler.WaitAllTasks();
+	taskScheduler.WaitForCounterAndFree(*counter, 0);
 
 	system("pause");
 

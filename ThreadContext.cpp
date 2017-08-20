@@ -27,6 +27,7 @@ ThreadContext::~ThreadContext()
 
 void ThreadContext::Start(WorkerThreadFunc workerThreadFunc)
 {
+	state = ThreadContextState::RUNNING;
 	m_Thread.reset(new std::thread(workerThreadFunc, this));
 }
 
