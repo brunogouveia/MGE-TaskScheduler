@@ -64,7 +64,7 @@ public:
 		// Create task descriptions
 		for (size_t i = 0; i < numTasks; i++)
 		{
-			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, tasks, taskCounter };
+			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
 		}
 
 		RunTaskImpl(taskDescriptions, numTasks, taskCounter);

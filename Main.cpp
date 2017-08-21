@@ -51,100 +51,14 @@ public:
 	}
 };
 
-class FiberCoroutine
-	: public Coroutine
-{
-public:
-	FiberCoroutine()
-		: mCurrent(nullptr), mRunning(false)
-	{
-	}
-
-	~FiberCoroutine()
-	{
-		if (mCurrent)
-			DeleteFiber(mCurrent);
-	}
-
-	void setup2()
-	{
-		if (!mCurrent)
-		{
-			mCurrent = CreateFiber(0,
-				&FiberCoroutine::proc, this);
-		}
-	}
-
-	void setup(Run f) override
-	{
-		if (!mMain)
-		{
-			mMain = ConvertThreadToFiber(NULL);
-		}
-		mRunning = true;
-		mFunction = std::move(f);
-
-		//if (!mCurrent)
-		//{
-		//	mCurrent = CreateFiber(0,
-		//		&FiberCoroutine::proc, this);
-		//}
-	}
-
-	bool step() override
-	{
-		SwitchToFiber(mCurrent);
-		return mRunning;
-	}
-
-	void yield()
-	{
-		SwitchToFiber(mMain);
-	}
-
-private:
-	void run()
-	{
-		while (true)
-		{
-			mFunction([this]
-			{ yield(); });
-			mRunning = false;
-			yield();
-		}
-	}
-
-	static VOID WINAPI proc(LPVOID data)
-	{
-		reinterpret_cast<FiberCoroutine*>(data)->run();
-	}
-
-	static LPVOID mMain;
-	LPVOID mCurrent;
-	bool mRunning;
-	Run mFunction;
-};
-
-LPVOID FiberCoroutine::mMain = nullptr;
-
-void threadFoo(void* param)
-{
-	std::cout << "Thread foo" << std::endl;
-}
-
 int main()
 {
-	ThreadContext threadContext;
-	threadContext.Start(&threadFoo);
-
 	TaskScheduler taskScheduler;
 
 	TaskExample tasks[1];
-	TaskCounter* counter = nullptr;
-	taskScheduler.RunTask(tasks, 1, &counter);
+	taskScheduler.RunTask(tasks, 1);
 
-	//taskScheduler.WaitAllTasks();
-	taskScheduler.WaitForCounterAndFree(counter, 0);
+	taskScheduler.WaitAllTasks();
 
 	system("pause");
 

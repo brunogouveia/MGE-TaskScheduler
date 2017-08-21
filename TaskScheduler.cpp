@@ -204,7 +204,7 @@ bool TaskScheduler::ExecuteNextTask(ThreadContext& context)
 			// Get next task
 			fiberContext = taskScheduler->m_AvailableFiberContexts.back();
 			taskScheduler->m_AvailableFiberContexts.pop_back();
-			taskDescription = taskScheduler->m_TaskDescriptionQueue.back();
+			taskDescription = taskScheduler->m_TaskDescriptionQueue.front();
 			taskScheduler->m_TaskDescriptionQueue.pop();
 		}
 	}
