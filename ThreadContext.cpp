@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "ThreadContext.h"
 
-
 ThreadContext::ThreadContext()
 {
 
@@ -10,11 +9,21 @@ ThreadContext::ThreadContext()
 
 ThreadContext::~ThreadContext()
 {
-	if (m_Thread == nullptr)
+	if (m_Thread)
 	{
-		return;
+		Stop();
 	}
+}
 
+void ThreadContext::Start(WorkerThreadFunc workerThreadFunc)
+{
+	m_State = ThreadContextState::RUNNING;
+	m_Thread.reset(new std::thread(workerThreadFunc, this));
+}
+
+void ThreadContext::Stop()
+{
+	m_State = ThreadContextState::EXIT;
 	if (m_Thread->joinable())
 	{
 		m_Thread->join();
@@ -23,17 +32,20 @@ ThreadContext::~ThreadContext()
 	{
 		m_Thread->detach();
 	}
-}
 
-void ThreadContext::Start(WorkerThreadFunc workerThreadFunc)
-{
-	state = ThreadContextState::RUNNING;
-	m_Thread.reset(new std::thread(workerThreadFunc, this));
-}
-
-void ThreadContext::Stop()
-{
 	m_Thread.reset();
+
+	m_State = ThreadContextState::IDLE;
+}
+
+void ThreadContext::CreateSchedulerFiber(Fiber::FiberFunc fiberEntryPoint, void* params)
+{
+	m_SchedulerFiberContext.CreateFromCurrentThreadAndRun(fiberEntryPoint, params);
+}
+
+void ThreadContext::SwitchToSchedulerFiber()
+{
+	m_SchedulerFiberContext.fiber.SwitchToFiber();
 }
 
 uint32_t ThreadContext::GetThreadIndex() const
@@ -46,6 +58,23 @@ void ThreadContext::SetThreadIndex(uint32_t index)
 	m_ThreadIndex = index;
 }
 
-void ThreadContext::Run()
+ThreadContextState ThreadContext::GetState() const
 {
+	return m_State;
 }
+
+void ThreadContext::SetState(ThreadContextState state)
+{
+	m_State = state;
+}
+
+TaskScheduler* ThreadContext::GetTaskScheduler() const
+{
+	return m_TaskScheduler;
+}
+
+void ThreadContext::SetTaskScheduler(TaskScheduler* taskScheduler)
+{
+	m_TaskScheduler = taskScheduler;
+}
+

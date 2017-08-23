@@ -19,7 +19,7 @@ TaskScheduler::TaskScheduler()
 	for (size_t i = 0; i < NUM_WORKERS_THREAD; ++i)
 	{
 		m_WorkerThreadContexts[i].SetThreadIndex(i);
-		m_WorkerThreadContexts[i].taskScheduler = this;
+		m_WorkerThreadContexts[i].SetTaskScheduler(this);
 		m_WorkerThreadContexts[i].Start(&TaskScheduler::WorkerThreadFunc);
 	}
 }
@@ -30,7 +30,12 @@ TaskScheduler::~TaskScheduler()
 	// Shutdown worker threads
 	for (size_t i = 0; i < NUM_WORKERS_THREAD; ++i)
 	{
-		m_WorkerThreadContexts[i].state = ThreadContextState::EXIT;
+		m_WorkerThreadContexts[i].SetState(ThreadContextState::EXIT);
+	}
+
+	for (size_t i = 0; i < NUM_WORKERS_THREAD; ++i)
+	{
+		m_WorkerThreadContexts[i].Stop();
 	}
 }
 
@@ -111,26 +116,26 @@ void TaskScheduler::WorkerThreadFunc(void* params)
 		std::cout << "WorkerThreadFunc: " << threadContext.GetThreadIndex() << std::endl;
 	}
 
-	threadContext.schedulerFiberContext.CreateFromCurrentThreadAndRun(&TaskScheduler::FiberSchedulerFunc, params);
+	threadContext.CreateSchedulerFiber(&TaskScheduler::FiberSchedulerFunc, params);
 }
 
 void TaskScheduler::FiberSchedulerFunc(void* params)
 {
 	assert(params && "FiberSchedulerFunc being initialized with null params");
 	ThreadContext& threadContext = *(static_cast<ThreadContext*>(params));
-	TaskScheduler* taskScheduler = threadContext.taskScheduler;
+	TaskScheduler* taskScheduler = threadContext.GetTaskScheduler();
 
 	std::cout << "FiberSchedulerFunc: " << threadContext.GetThreadIndex() << std::endl;
 
-	threadContext.taskScheduler->m_InitializedThreads.fetch_add(1);
-	while (threadContext.taskScheduler->m_InitializedThreads.load() < NUM_WORKERS_THREAD)
+	taskScheduler->m_InitializedThreads.fetch_add(1);
+	while (taskScheduler->m_InitializedThreads.load() < NUM_WORKERS_THREAD)
 	{
 		// Do nothing
 	}
 
 	_mm_mfence();
 
-	while (threadContext.state != ThreadContextState::EXIT)
+	while (threadContext.GetState() != ThreadContextState::EXIT)
 	{
 		if (ExecuteNextTask(threadContext))
 		{
@@ -157,13 +162,13 @@ void TaskScheduler::FiberMainFunc(void* params)
 		fiberContext.taskDescription.taskEntryPoint(fiberContext.taskDescription.userData, fiberContext);
 		fiberContext.state = FiberContextState::FINISHED;
 
-		fiberContext.threadContext->schedulerFiberContext.fiber.SwitchToFiber();
+		fiberContext.threadContext->SwitchToSchedulerFiber();
 	}
 }
 
 bool TaskScheduler::ExecuteNextTask(ThreadContext& context)
 {
-	TaskScheduler* taskScheduler = context.taskScheduler;
+	TaskScheduler* taskScheduler = context.GetTaskScheduler();
 	assert(taskScheduler && "TaskScheduler invalid.");
 
 	FiberContext* fiberContext = nullptr;

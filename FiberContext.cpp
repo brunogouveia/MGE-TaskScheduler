@@ -24,17 +24,17 @@ void FiberContext::CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* para
 
 void FiberContext::WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value)
 {
-	TaskScheduler* taskScheduler = threadContext->taskScheduler;
+	TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
 
 	taskScheduler->WaitForCounterAndFree(*this, taskCounter, value);
 	state = FiberContextState::WAITING;
 
 	// Switch back to scheduler fiber
-	threadContext->schedulerFiberContext.fiber.SwitchToFiber();
+	threadContext->SwitchToSchedulerFiber();
 }
 
 void FiberContext::RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
 {
-	TaskScheduler* taskScheduler = threadContext->taskScheduler;
+	TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
 	taskScheduler->RunTaskImpl(tasks, numTasks, taskCounter);
 }

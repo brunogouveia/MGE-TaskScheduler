@@ -28,18 +28,24 @@ public:
 	void Start(WorkerThreadFunc workerThreadFunc);
 	void Stop();
 
+	void CreateSchedulerFiber(Fiber::FiberFunc fiberEntryPoint, void* params);
+	void SwitchToSchedulerFiber();
+
 	uint32_t GetThreadIndex() const;
 	void SetThreadIndex(uint32_t index);
 
-	FiberContext schedulerFiberContext;
-	ThreadContextState state = ThreadContextState::IDLE;
+	ThreadContextState GetState() const;
+	void SetState(ThreadContextState state);
 
-	TaskScheduler* taskScheduler = nullptr;
+	TaskScheduler* GetTaskScheduler() const;
+	void SetTaskScheduler(TaskScheduler* taskScheduler);
 private:
-	void Run();
-
 	WorkerThreadFunc m_WorkerThreadFunc = nullptr;
 	std::unique_ptr<std::thread> m_Thread;
 	uint32_t m_ThreadIndex;
+
+	ThreadContextState m_State = ThreadContextState::IDLE;
+	FiberContext m_SchedulerFiberContext;
+	TaskScheduler* m_TaskScheduler = nullptr;
 };
 
