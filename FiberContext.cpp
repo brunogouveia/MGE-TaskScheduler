@@ -36,5 +36,5 @@ void FiberContext::WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t valu
 void FiberContext::RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
 {
 	TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
-	taskScheduler->RunTaskImpl(tasks, numTasks, taskCounter);
+	taskScheduler->RunTask(tasks, numTasks, taskCounter);
 }

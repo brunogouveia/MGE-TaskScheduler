@@ -85,7 +85,7 @@ void TaskScheduler::WaitAllTasks()
 	}
 }
 
-void TaskScheduler::RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+void TaskScheduler::RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
 {
 	// Add the tasks to the queue
 	{

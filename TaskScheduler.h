@@ -67,16 +67,16 @@ public:
 			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
 		}
 
-		RunTaskImpl(taskDescriptions, numTasks, taskCounter);
+		RunTask(taskDescriptions, numTasks, taskCounter);
 	}
+
+	void RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
 
 	void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value);
 	void WaitForCounterAndFree(TaskCounter* counter, uint32_t value);
 	void WaitAllTasks();
 
-//private:
-	void RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
-
+private:
 	static void WorkerThreadFunc(void* params);
 	static void FiberSchedulerFunc(void* params);
 	static void FiberMainFunc(void* params);
