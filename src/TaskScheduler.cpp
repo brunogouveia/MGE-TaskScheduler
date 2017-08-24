@@ -221,7 +221,7 @@ namespace MGE
 		{
 			if (taskDescription.counter)
 			{
-				// If it's the last task to decrease the counter. Hence, delete it.
+				// If it's the last task to decrease the counter, make sure to delete the counter.
 				if (taskDescription.counter->Decrement() == 0u)
 				{
 					delete taskDescription.counter;
