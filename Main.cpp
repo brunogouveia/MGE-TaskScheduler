@@ -44,7 +44,7 @@ public:
 		SubTaskExample subTasks[10];
 		TaskCounter* taskCounter;
 
-		context.RunTask(subTasks, 10, &taskCounter);
+		context.RunTasks(subTasks, 10, &taskCounter);
 		context.WaitForCounterAndFree(taskCounter, 0);
 
 		std::cout << "Test - done" << std::endl;
@@ -56,7 +56,7 @@ int main()
 	TaskScheduler taskScheduler;
 
 	TaskExample tasks[1];
-	taskScheduler.RunTask(tasks, 1);
+	taskScheduler.RunTasks(tasks, 1);
 
 	taskScheduler.WaitAllTasks();
 

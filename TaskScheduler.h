@@ -50,7 +50,7 @@ public:
 	~TaskScheduler();
 
 	template <typename Task>
-	void RunTask(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
+	void RunTasks(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
 	{
 		TaskCounter* taskCounter = nullptr;
 		if (outTaskCounter)
@@ -67,10 +67,10 @@ public:
 			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
 		}
 
-		RunTask(taskDescriptions, numTasks, taskCounter);
+		RunTasks(taskDescriptions, numTasks, taskCounter);
 	}
 
-	void RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
+	void RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
 
 	void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value);
 	void WaitForCounterAndFree(TaskCounter* counter, uint32_t value);

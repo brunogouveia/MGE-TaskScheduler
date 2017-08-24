@@ -85,7 +85,7 @@ void TaskScheduler::WaitAllTasks()
 	}
 }
 
-void TaskScheduler::RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+void TaskScheduler::RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
 {
 	// Add the tasks to the queue
 	{
@@ -162,7 +162,7 @@ void TaskScheduler::FiberMainFunc(void* params)
 		fiberContext.taskDescription.taskEntryPoint(fiberContext.taskDescription.userData, fiberContext);
 		fiberContext.state = FiberContextState::FINISHED;
 
-		fiberContext.threadContext->SwitchToSchedulerFiber();
+		fiberContext.GetThreadContext()->SwitchToSchedulerFiber();
 	}
 }
 
@@ -214,7 +214,7 @@ bool TaskScheduler::ExecuteNextTask(ThreadContext& context)
 		}
 	}
 	
-	fiberContext->threadContext = &context;
+	fiberContext->SetThreadContext(&context);
 	fiberContext->taskDescription = taskDescription;
 	fiberContext->fiber.SwitchToFiber();
 

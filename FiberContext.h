@@ -20,16 +20,16 @@ enum class FiberContextState
 class FiberContext
 {
 public:
-	typedef void(*FiberFunc)(void* params);
+	typedef void(*FiberEntryPoint)(void* params);
 
 	FiberContext();
 	~FiberContext();
 
-	void CreateFiber(FiberFunc fiberFunc, void* parameters);
-	void CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* params);
+	void CreateFiber(FiberEntryPoint fiberEntryPoint, void* parameters);
+	void CreateFromCurrentThreadAndRun(FiberEntryPoint fiberEntryPoint, void* params);
 
 	template <typename Task>
-	void RunTask(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
+	void RunTasks(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
 	{
 		TaskCounter* taskCounter = nullptr;
 		if (outTaskCounter)
@@ -46,18 +46,29 @@ public:
 			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
 		}
 
-		RunTaskImpl(taskDescriptions, numTasks, taskCounter);
+		RunTask(taskDescriptions, numTasks, taskCounter);
 	}
+
+	template <typename Task>
+	void RunTasksAndWait(Task* tasks, uint32_t numTasks)
+	{
+		TaskCounter* taskCounter;
+		RunTask(tasks, numTasks, &taskCounter);
+		WaitForCounterAndFree(taskCounter, 0);
+	}
+
+	void RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
 
 	void WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value);
 
-	Fiber fiber;
-	FiberContextState state = FiberContextState::IDLE;
-	TaskDescription taskDescription;
+	ThreadContext* GetThreadContext() const;
+	void SetThreadContext(ThreadContext* threadContext);
 
-	ThreadContext* threadContext = nullptr;
+	Fiber fiber;
+	TaskDescription taskDescription;
+	FiberContextState state = FiberContextState::IDLE;
 
 private:
-	void RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
+	ThreadContext* m_ThreadContext = nullptr;
 };
 

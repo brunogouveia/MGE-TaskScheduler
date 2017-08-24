@@ -12,29 +12,39 @@ FiberContext::~FiberContext()
 {
 }
 
-void FiberContext::CreateFiber(FiberFunc fiberFunc, void* parameters)
+void FiberContext::CreateFiber(FiberEntryPoint fiberEntryPoint, void* parameters)
 {
-	fiber.CreateFiber(fiberFunc, parameters);
+	fiber.CreateFiber(fiberEntryPoint, parameters);
 }
 
-void FiberContext::CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* params)
+void FiberContext::CreateFromCurrentThreadAndRun(FiberEntryPoint fiberEntryPoint, void* params)
 {
-	fiber.CreateFromCurrentThreadAndRun(fiberFunc, params);
+	fiber.CreateFromCurrentThreadAndRun(fiberEntryPoint, params);
 }
 
 void FiberContext::WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value)
 {
-	TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
+	TaskScheduler* taskScheduler = m_ThreadContext->GetTaskScheduler();
 
 	taskScheduler->WaitForCounterAndFree(*this, taskCounter, value);
 	state = FiberContextState::WAITING;
 
 	// Switch back to scheduler fiber
-	threadContext->SwitchToSchedulerFiber();
+	m_ThreadContext->SwitchToSchedulerFiber();
 }
 
-void FiberContext::RunTaskImpl(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+ThreadContext* FiberContext::GetThreadContext() const
 {
-	TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
-	taskScheduler->RunTask(tasks, numTasks, taskCounter);
+	return m_ThreadContext;
+}
+
+void FiberContext::SetThreadContext(ThreadContext* threadContext)
+{
+	m_ThreadContext = threadContext;
+}
+
+void FiberContext::RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+{
+	TaskScheduler* taskScheduler = m_ThreadContext->GetTaskScheduler();
+	taskScheduler->RunTasks(tasks, numTasks, taskCounter);
 }
