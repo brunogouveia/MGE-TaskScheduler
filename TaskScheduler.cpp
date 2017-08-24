@@ -4,7 +4,10 @@
 #include <assert.h>
 #include <iostream>
 
-__declspec(thread) uint32_t m_IsWorkerThread = 0;
+namespace
+{
+	__declspec(thread) uint32_t m_IsWorkerThread = 0;
+}
 
 TaskScheduler::TaskScheduler()
 {
@@ -41,7 +44,7 @@ TaskScheduler::~TaskScheduler()
 
 void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value)
 {
-	assert(counter->onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
+	assert(counter->onCompleteAction == nullptr && "Overriding counter.onCompleteAction function.");
 
 	// TODO - DELETE COUNTER
 
@@ -57,7 +60,7 @@ void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounte
 
 void TaskScheduler::WaitForCounterAndFree(TaskCounter* counter, uint32_t value)
 {
-	assert(counter->onCompleteAction == nullptr, "Overriding counter.onCompleteAction function.");
+	assert(counter->onCompleteAction == nullptr && "Overriding counter.onCompleteAction function.");
 
 	static std::mutex schedulerThreadMutex;
 	static std::condition_variable schedulerThreadCV;
@@ -79,10 +82,7 @@ void TaskScheduler::WaitForCounterAndFree(TaskCounter* counter, uint32_t value)
 void TaskScheduler::WaitAllTasks()
 {
 	std::unique_lock<std::mutex> lock(m_AllTasksFinishedMutex);
-	while (m_NumPendingTasks > 0)
-	{
-		m_AllTasksFinished.wait(lock);
-	}
+	m_AllTasksFinished.wait(lock, [&]() -> bool { return m_NumPendingTasks > 0; });
 }
 
 void TaskScheduler::RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
@@ -222,7 +222,11 @@ bool TaskScheduler::ExecuteNextTask(ThreadContext& context)
 	{
 		if (taskDescription.counter)
 		{
-			taskDescription.counter->Decrement();
+			// If it's the last task to decrease the counter. Hence, delete it.
+			if (taskDescription.counter->Decrement() == 0u)
+			{
+				delete taskDescription.counter;
+			}
 		}
 
 		// Release fiber after finishing executing the task

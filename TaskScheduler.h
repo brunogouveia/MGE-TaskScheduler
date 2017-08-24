@@ -17,14 +17,17 @@ public:
 		: m_Counter(initialCount)
 	{}
 
-	void Decrement()
+	uint32_t Decrement()
 	{
-		m_Counter.fetch_sub(1u);
+		auto value = m_Counter.fetch_sub(1u);
 
 		if (m_Counter == 0 && onCompleteAction)
 		{
 			onCompleteAction();
 		}
+
+		// Value - u is the actual value
+		return value - 1u;
 	}
 
 public:
