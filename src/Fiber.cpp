@@ -27,20 +27,14 @@ namespace MGE
 		m_FiberFunc = fiberFunc;
 		m_FiberParams = parameters;
 
-		assert(!::IsThreadAFiber(), "Thread is a fiber already");
-		//if (!m_Fiber)
-		//{
+		assert(!::IsThreadAFiber() && "Thread is a fiber already");
 		m_Fiber = ::ConvertThreadToFiber(NULL);
-		//}
 
 		m_FiberFunc(m_FiberParams);
-
-		//DeleteFiber();
 	}
 
 	void Fiber::DeleteFiber()
 	{
-		assert(false, "NOOOO");
 		::DeleteFiber(m_Fiber);
 		m_Fiber = nullptr;
 
@@ -50,7 +44,7 @@ namespace MGE
 
 	void Fiber::SwitchToFiber() const
 	{
-		assert(m_Fiber, "Invalid fiber");
+		assert(m_Fiber && "Trying to switch to invalid fiber");
 		::SwitchToFiber(m_Fiber);
 	}
 
