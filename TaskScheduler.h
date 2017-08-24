@@ -10,105 +10,110 @@
 #include <queue>
 #include <vector>
 
-class TaskCounter
+namespace MGE
 {
-public:
-	explicit TaskCounter(uint32_t initialCount)
-		: m_Counter(initialCount)
-	{}
-
-	uint32_t Decrement()
+	class TaskCounter
 	{
-		auto value = m_Counter.fetch_sub(1u);
+	public:
+		explicit TaskCounter(uint32_t initialCount)
+			: m_Counter(initialCount)
+		{}
 
-		if (m_Counter == 0 && onCompleteAction)
+		uint32_t Decrement()
 		{
-			onCompleteAction();
+			auto value = m_Counter.fetch_sub(1u);
+
+			if (m_Counter == 0 && onCompleteAction)
+			{
+				onCompleteAction();
+			}
+
+			// Value - u is the actual value
+			return value - 1u;
 		}
 
-		// Value - u is the actual value
-		return value - 1u;
+	public:
+		FiberContext* fiberContext = nullptr;
+		std::function<void()> onCompleteAction = nullptr;
+	private:
+		std::atomic<uint32_t> m_Counter;
+	};
+}
+
+#define MGE_DECLARE_TASK(TaskType)										\
+	static void TaskEntryPoint(void* params, MGE::FiberContext& context)\
+	{																	\
+		static_cast<TaskType*>(params)->Do(context);					\
 	}
 
-public:
-	FiberContext* fiberContext = nullptr;
-	std::function<void()> onCompleteAction = nullptr;
-private:
-	std::atomic<uint32_t> m_Counter;
-};
-
-#define MGE_DECLARE_TASK(TaskType)									\
-	static void TaskEntryPoint(void* params, FiberContext& context) \
-	{																\
-		static_cast<TaskType*>(params)->Do(context);				\
-	}
-
-class TaskScheduler
+namespace MGE
 {
-public:
-	static const int NUM_STANDARD_FIBERS = 128;
-	static const int NUM_WORKERS_THREAD = 2;
-
-	explicit TaskScheduler();
-	~TaskScheduler();
-
-	template <typename Task>
-	void RunTasks(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
+	class TaskScheduler
 	{
-		TaskCounter* taskCounter = nullptr;
-		if (outTaskCounter)
+	public:
+		static const int NUM_STANDARD_FIBERS = 128;
+		static const int NUM_WORKERS_THREAD = 2;
+
+		explicit TaskScheduler();
+		~TaskScheduler();
+
+		template <typename Task>
+		void RunTasks(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
 		{
-			taskCounter = (*outTaskCounter) = new TaskCounter(numTasks);
+			TaskCounter* taskCounter = nullptr;
+			if (outTaskCounter)
+			{
+				taskCounter = (*outTaskCounter) = new TaskCounter(numTasks);
+			}
+
+			void* test = alloca(sizeof(TaskDescription) * numTasks);
+			TaskDescription* taskDescriptions = static_cast<TaskDescription*>(test);
+
+			// Create task descriptions
+			for (size_t i = 0; i < numTasks; i++)
+			{
+				taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
+			}
+
+			RunTasks(taskDescriptions, numTasks, taskCounter);
 		}
 
-		void* test = alloca(sizeof(TaskDescription) * numTasks);
-		TaskDescription* taskDescriptions = static_cast<TaskDescription*>(test);
+		void RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
 
-		// Create task descriptions
-		for (size_t i = 0; i < numTasks; i++)
-		{
-			taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
-		}
+		void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value);
+		void WaitForCounterAndFree(TaskCounter* counter, uint32_t value);
+		void WaitAllTasks();
 
-		RunTasks(taskDescriptions, numTasks, taskCounter);
-	}
+	private:
+		static void WorkerThreadFunc(void* params);
+		static void FiberSchedulerFunc(void* params);
+		static void FiberMainFunc(void* params);
 
-	void RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
+		static bool ExecuteNextTask(ThreadContext& context);
 
-	void WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value);
-	void WaitForCounterAndFree(TaskCounter* counter, uint32_t value);
-	void WaitAllTasks();
+		static bool IsWorkerThread();
 
-private:
-	static void WorkerThreadFunc(void* params);
-	static void FiberSchedulerFunc(void* params);
-	static void FiberMainFunc(void* params);
+		void MoveFiberToWaitList(FiberContext& fiberContext);
+		void MoveFiberToWakeupList(FiberContext& fiberContext);
 
-	static bool ExecuteNextTask(ThreadContext& context);
+		ThreadContext m_WorkerThreadContexts[NUM_WORKERS_THREAD];
 
-	static bool IsWorkerThread();
+		FiberContext m_StandardFiberContexts[NUM_STANDARD_FIBERS];
 
-	void MoveFiberToWaitList(FiberContext& fiberContext);
-	void MoveFiberToWakeupList(FiberContext& fiberContext);
+		std::vector<FiberContext*> m_AvailableFiberContexts;
+		std::vector<FiberContext*> m_WaitListFiberContexts;
+		std::vector<FiberContext*> m_WakeupListFiberContexts;
 
-	ThreadContext m_WorkerThreadContexts[NUM_WORKERS_THREAD];
+		std::queue<TaskDescription> m_TaskDescriptionQueue;
 
-	FiberContext m_StandardFiberContexts[NUM_STANDARD_FIBERS];
+		std::mutex m_AvailableFibersMutext;
+		std::mutex m_WaitListFibersMutext;
+		std::mutex m_WakeupListFibersMutext;
+		std::mutex m_TaskQueueMutext;
+		std::atomic<int> m_InitializedThreads = 0;
 
-	std::vector<FiberContext*> m_AvailableFiberContexts;
-	std::vector<FiberContext*> m_WaitListFiberContexts;
-	std::vector<FiberContext*> m_WakeupListFiberContexts;
-
-	std::queue<TaskDescription> m_TaskDescriptionQueue;
-
-	std::mutex m_AvailableFibersMutext;
-	std::mutex m_WaitListFibersMutext;
-	std::mutex m_WakeupListFibersMutext;
-	std::mutex m_TaskQueueMutext;
-	std::atomic<int> m_InitializedThreads = 0;
-
-	std::atomic<uint32_t> m_NumPendingTasks = 0;
-	std::condition_variable m_AllTasksFinished;
-	std::mutex m_AllTasksFinishedMutex;
-};
-
+		std::atomic<uint32_t> m_NumPendingTasks = 0;
+		std::condition_variable m_AllTasksFinished;
+		std::mutex m_AllTasksFinishedMutex;
+	};
+}

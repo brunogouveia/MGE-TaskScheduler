@@ -6,46 +6,48 @@
 #include <memory>
 #include <thread>
 
-class TaskScheduler;
-
-enum class ThreadContextState
+namespace MGE
 {
-	IDLE,
-	RUNNING,
-	EXIT
-};
+	class TaskScheduler;
 
-class ThreadContext
-{
-public:
-	typedef void(*WorkerThreadFunc)(void* params);
+	enum class ThreadContextState
+	{
+		IDLE,
+		RUNNING,
+		EXIT
+	};
 
-	ThreadContext(const ThreadContext&) = delete;
+	class ThreadContext
+	{
+	public:
+		typedef void(*WorkerThreadFunc)(void* params);
 
-	ThreadContext();
-	~ThreadContext();
+		ThreadContext(const ThreadContext&) = delete;
 
-	void Start(WorkerThreadFunc workerThreadFunc);
-	void Stop();
+		ThreadContext();
+		~ThreadContext();
 
-	void CreateSchedulerFiber(Fiber::FiberFunc fiberEntryPoint, void* params);
-	void SwitchToSchedulerFiber();
+		void Start(WorkerThreadFunc workerThreadFunc);
+		void Stop();
 
-	uint32_t GetThreadIndex() const;
-	void SetThreadIndex(uint32_t index);
+		void CreateSchedulerFiber(Fiber::FiberFunc fiberEntryPoint, void* params);
+		void SwitchToSchedulerFiber();
 
-	ThreadContextState GetState() const;
-	void SetState(ThreadContextState state);
+		uint32_t GetThreadIndex() const;
+		void SetThreadIndex(uint32_t index);
 
-	TaskScheduler* GetTaskScheduler() const;
-	void SetTaskScheduler(TaskScheduler* taskScheduler);
-private:
-	WorkerThreadFunc m_WorkerThreadFunc = nullptr;
-	std::unique_ptr<std::thread> m_Thread;
-	uint32_t m_ThreadIndex;
+		ThreadContextState GetState() const;
+		void SetState(ThreadContextState state);
 
-	ThreadContextState m_State = ThreadContextState::IDLE;
-	FiberContext m_SchedulerFiberContext;
-	TaskScheduler* m_TaskScheduler = nullptr;
-};
+		TaskScheduler* GetTaskScheduler() const;
+		void SetTaskScheduler(TaskScheduler* taskScheduler);
+	private:
+		WorkerThreadFunc m_WorkerThreadFunc = nullptr;
+		std::unique_ptr<std::thread> m_Thread;
+		uint32_t m_ThreadIndex;
 
+		ThreadContextState m_State = ThreadContextState::IDLE;
+		FiberContext m_SchedulerFiberContext;
+		TaskScheduler* m_TaskScheduler = nullptr;
+	};
+}

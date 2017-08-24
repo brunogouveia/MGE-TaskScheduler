@@ -2,27 +2,29 @@
 
 #include <windows.h>
 
-class Fiber
+namespace MGE
 {
-public:
-	typedef void(*FiberFunc)(void*);
+	class Fiber
+	{
+	public:
+		typedef void(*FiberFunc)(void*);
 
-	Fiber();
-	~Fiber();
+		Fiber();
+		~Fiber();
 
-	void CreateFiber(FiberFunc fiberFunc, void* parameters);
-	void CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* parameters);
+		void CreateFiber(FiberFunc fiberFunc, void* parameters);
+		void CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* parameters);
 
-	void DeleteFiber();
+		void DeleteFiber();
 
-	void SwitchToFiber() const;
+		void SwitchToFiber() const;
 
-private:
-	static void WINAPI FiberInternalFunc(void* parameters);
+	private:
+		static void WINAPI FiberInternalFunc(void* parameters);
 
-	void* m_Fiber = nullptr;
+		void* m_Fiber = nullptr;
 
-	FiberFunc m_FiberFunc = nullptr;
-	void* m_FiberParams = nullptr;
-};
-
+		FiberFunc m_FiberFunc = nullptr;
+		void* m_FiberParams = nullptr;
+	};
+}
