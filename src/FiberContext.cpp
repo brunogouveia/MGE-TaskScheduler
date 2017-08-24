@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "FiberContext.h"
 
 #include "TaskScheduler.h"

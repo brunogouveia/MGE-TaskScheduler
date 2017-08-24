@@ -1,7 +1,5 @@
 // Fiber.cpp : Defines the entry point for the console application.
 //
-#include "stdafx.h"
-
 #include "ThreadContext.h"
 #include "TaskScheduler.h"
 

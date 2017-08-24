@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "Fiber.h"
 
 #include <assert.h>

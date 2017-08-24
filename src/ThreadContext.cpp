@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "ThreadContext.h"
 
 namespace MGE

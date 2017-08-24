@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "TaskScheduler.h"
 
 #include <assert.h>
