@@ -17,7 +17,7 @@ namespace MGE
 
 		void DeleteFiber();
 
-		void SwitchToFiber() const;
+		static void SwitchTo(Fiber& from, Fiber& to);
 
 	private:
 		static void WINAPI FiberInternalFunc(void* parameters);

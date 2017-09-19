@@ -1,7 +1,6 @@
 #include "Fiber.h"
 
 #include <assert.h>
-#include <windows.h>
 
 namespace MGE
 {
@@ -19,7 +18,7 @@ namespace MGE
 		m_FiberFunc = fiberFunc;
 		m_FiberParams = parameters;
 
-		m_Fiber = ::CreateFiber(0, &Fiber::FiberInternalFunc, this);
+		m_Fiber = ::CreateFiber(128, &Fiber::FiberInternalFunc, this);
 	}
 
 	void Fiber::CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* parameters)
@@ -31,6 +30,8 @@ namespace MGE
 		m_Fiber = ::ConvertThreadToFiber(NULL);
 
 		m_FiberFunc(m_FiberParams);
+
+		DeleteFiber();
 	}
 
 	void Fiber::DeleteFiber()
@@ -42,10 +43,11 @@ namespace MGE
 		m_FiberParams = nullptr;
 	}
 
-	void Fiber::SwitchToFiber() const
+	void Fiber::SwitchTo(Fiber& from, Fiber& to)
 	{
-		assert(m_Fiber && "Trying to switch to invalid fiber");
-		::SwitchToFiber(m_Fiber);
+		assert(from.m_Fiber && "Invalid source fiber");
+		assert(to.m_Fiber && "Invalid target fiber");
+		::SwitchToFiber(to.m_Fiber);
 	}
 
 	void WINAPI Fiber::FiberInternalFunc(void* parameters)

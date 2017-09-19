@@ -13,25 +13,50 @@ namespace MGE
 	{
 	}
 
-	void FiberContext::CreateFiber(FiberEntryPoint fiberEntryPoint, void* parameters)
+	void FiberContext::CreateFiber(FiberFunc fiberFunc, void* parameters)
 	{
-		fiber.CreateFiber(fiberEntryPoint, parameters);
+		m_Fiber.CreateFiber(fiberFunc, parameters);
 	}
 
-	void FiberContext::CreateFromCurrentThreadAndRun(FiberEntryPoint fiberEntryPoint, void* params)
+	void FiberContext::CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* params)
 	{
-		fiber.CreateFromCurrentThreadAndRun(fiberEntryPoint, params);
+		m_Fiber.CreateFromCurrentThreadAndRun(fiberFunc, params);
 	}
 
-	void FiberContext::WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value)
+	void FiberContext::ReadyToWakeup()
 	{
-		TaskScheduler* taskScheduler = m_ThreadContext->GetTaskScheduler();
+		if (m_TaskCounter)
+		{
+			m_TaskCounter->Decrement();
+		}
+	}
 
-		taskScheduler->WaitForCounterAndFree(*this, taskCounter, value);
-		state = FiberContextState::WAITING;
+	void FiberContext::WaitForCounterAndFree(std::shared_ptr<TaskCounter> taskCounter, uint32_t value)
+	{
+		ThreadContext* threadContext = GetThreadContext();
+		TaskScheduler* taskScheduler = threadContext->GetTaskScheduler();
+		m_TaskCounter = taskCounter;
+
+		m_State = FiberContextState::YIELD;
+		taskScheduler->WaitForCounterAndFree(*this, taskCounter.get(), value);
 
 		// Switch back to scheduler fiber
-		m_ThreadContext->SwitchToSchedulerFiber();
+		Fiber::SwitchTo(m_Fiber, threadContext->GetShedulerFiber());
+	}
+
+	Fiber& FiberContext::GetFiber()
+	{
+		return m_Fiber;
+	}
+
+	FiberContextState FiberContext::GetState() const
+	{
+		return m_State.load();
+	}
+
+	void FiberContext::SetState(FiberContextState state)
+	{
+		m_State.store(state);
 	}
 
 	ThreadContext* FiberContext::GetThreadContext() const
@@ -44,9 +69,9 @@ namespace MGE
 		m_ThreadContext = threadContext;
 	}
 
-	void FiberContext::RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+	void FiberContext::RunTaskImpl(TaskList& taskList)
 	{
-		TaskScheduler* taskScheduler = m_ThreadContext->GetTaskScheduler();
-		taskScheduler->RunTasks(tasks, numTasks, taskCounter);
+		TaskScheduler* taskScheduler = GetThreadContext()->GetTaskScheduler();
+		taskScheduler->RunTaskImpl(taskList);
 	}
 }

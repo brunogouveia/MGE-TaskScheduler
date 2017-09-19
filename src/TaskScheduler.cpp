@@ -5,10 +5,7 @@
 
 namespace MGE
 {
-	namespace
-	{
-		__declspec(thread) uint32_t m_IsWorkerThread = 0;
-	}
+	__declspec(thread) uint32_t m_IsWorkerThread = 0;
 
 	TaskScheduler::TaskScheduler()
 	{
@@ -16,7 +13,7 @@ namespace MGE
 		for (size_t i = 0; i < NUM_STANDARD_FIBERS; ++i)
 		{
 			m_StandardFiberContexts[i].CreateFiber(&TaskScheduler::FiberMainFunc, &m_StandardFiberContexts[i]);
-			m_AvailableFiberContexts.push_back(&m_StandardFiberContexts[i]);
+			m_AvailableFiberContexts.TryPush(&m_StandardFiberContexts[i]);
 		}
 
 		// Setup worker threads
@@ -36,71 +33,35 @@ namespace MGE
 		{
 			m_WorkerThreadContexts[i].SetState(ThreadContextState::EXIT);
 		}
-
-		for (size_t i = 0; i < NUM_WORKERS_THREAD; ++i)
-		{
-			m_WorkerThreadContexts[i].Stop();
-		}
 	}
 
 	void TaskScheduler::WaitForCounterAndFree(FiberContext& fiberContext, TaskCounter* counter, uint32_t value)
 	{
-		assert(counter->onCompleteAction == nullptr && "Overriding counter.onCompleteAction function.");
+		assert(counter->GetOnCompleteAction() == nullptr, "Overriding counter.onCompleteAction function.");
 
 		// Set complete action to move fiber to wakeup list.
-		counter->onCompleteAction = [this, &fiberContext]()
+		counter->SetOnCompleteAction([this, &fiberContext]()
 		{
 			MoveFiberToWakeupList(fiberContext);
-		};
-
-		// Put Fiber to wait list.
-		MoveFiberToWaitList(fiberContext);
-	}
-
-	void TaskScheduler::WaitForCounterAndFree(TaskCounter* counter, uint32_t value)
-	{
-		assert(counter->onCompleteAction == nullptr && "Overriding counter.onCompleteAction function.");
-
-		static std::mutex schedulerThreadMutex;
-		static std::condition_variable schedulerThreadCV;
-		static bool doneWaiting;
-
-		doneWaiting = false;
-
-		counter->onCompleteAction = [&]()
-		{
-			std::unique_lock<std::mutex> lock(schedulerThreadMutex);
-			doneWaiting = true;
-			schedulerThreadCV.notify_one();
-		};
-
-		std::unique_lock<std::mutex> lock(schedulerThreadMutex);
-		schedulerThreadCV.wait(lock, [&]() -> bool { return doneWaiting; });
+		});
 	}
 
 	void TaskScheduler::WaitAllTasks()
 	{
 		std::unique_lock<std::mutex> lock(m_AllTasksFinishedMutex);
-		m_AllTasksFinished.wait(lock, [&]() -> bool { return m_NumPendingTasks == 0; });
+		while (m_NumPendingTasks > 0)
+		{
+			m_AllTasksFinished.wait(lock);
+		}
 	}
 
-	void TaskScheduler::RunTasks(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter)
+	void TaskScheduler::RunTaskImpl(TaskList& taskList)
 	{
 		// Add the tasks to the queue
-		{
-			std::lock_guard<std::mutex> guard(m_TaskQueueMutext);
-			for (size_t i = 0; i < numTasks; ++i)
-			{
-				tasks[i].counter = taskCounter;
-				m_TaskDescriptionQueue.push(tasks[i]);
-			}
-		}
+		assert(m_TaskManager.Submit(taskList));
 
 		// Increment the num of pending tasks
-		{
-			std::lock_guard<std::mutex> lock(m_AllTasksFinishedMutex);
-			m_NumPendingTasks += numTasks;
-		}
+		m_NumPendingTasks.fetch_add(taskList.GetNumTasks(), std::memory_order_relaxed);
 	}
 
 	void TaskScheduler::WorkerThreadFunc(void* params)
@@ -115,7 +76,7 @@ namespace MGE
 			std::cout << "WorkerThreadFunc: " << threadContext.GetThreadIndex() << std::endl;
 		}
 
-		threadContext.CreateSchedulerFiber(&TaskScheduler::FiberSchedulerFunc, params);
+		threadContext.GetShedulerFiber().CreateFromCurrentThreadAndRun(&TaskScheduler::FiberSchedulerFunc, params);
 	}
 
 	void TaskScheduler::FiberSchedulerFunc(void* params)
@@ -124,23 +85,15 @@ namespace MGE
 		ThreadContext& threadContext = *(static_cast<ThreadContext*>(params));
 		TaskScheduler* taskScheduler = threadContext.GetTaskScheduler();
 
-		std::cout << "FiberSchedulerFunc: " << threadContext.GetThreadIndex() << std::endl;
-
-		taskScheduler->m_InitializedThreads.fetch_add(1);
-		while (taskScheduler->m_InitializedThreads.load() < NUM_WORKERS_THREAD)
-		{
-			// Do nothing
-		}
-
-		_mm_mfence();
-
 		while (threadContext.GetState() != ThreadContextState::EXIT)
 		{
-			if (ExecuteNextTask(threadContext))
+			if (!ExecuteNextTask(threadContext))
 			{
-				std::unique_lock<std::mutex> lock(taskScheduler->m_AllTasksFinishedMutex);
-				taskScheduler->m_NumPendingTasks--;
-				taskScheduler->m_AllTasksFinished.notify_one();
+				if (taskScheduler->m_NumPendingTasks == 0)
+				{
+					std::lock_guard<std::mutex> guard(taskScheduler->m_AllTasksFinishedMutex);
+					taskScheduler->m_AllTasksFinished.notify_one();
+				}
 			}
 		}
 	}
@@ -150,18 +103,44 @@ namespace MGE
 		assert(params && "FiberMainFunc being initialized with null params");
 		FiberContext& fiberContext = *(static_cast<FiberContext*>(params));
 
-		std::cout << "FiberMainFunc: " << std::endl;
+		TaskScheduler* taskScheduler = fiberContext.GetThreadContext()->GetTaskScheduler();
+		auto taskProvider = taskScheduler->m_TaskManager.CreateTaskProvider();
 
 		while (true)
 		{
-			assert(fiberContext.taskDescription.taskEntryPoint && "Invalid taskEntryPoint");
-			assert(fiberContext.taskDescription.userData && "Invalid userData");
+			uint32_t numTasksCompleted = 0;
+			fiberContext.SetState(FiberContextState::RUNNING);
 
-			fiberContext.state = FiberContextState::RUNNING;
-			fiberContext.taskDescription.taskEntryPoint(fiberContext.taskDescription.userData, fiberContext);
-			fiberContext.state = FiberContextState::FINISHED;
+			if (taskProvider.HasAvailableTaskList())
+			{
+				TaskList* taskList = nullptr;
+				while ((taskList = taskProvider.GetNextTaskList()))
+				{
+					TaskExecutionResult result;
+					while ((result = taskList->ExecuteNextTask(fiberContext)) != TaskExecutionResult::Failed)
+					{
+						numTasksCompleted++;
+					}
 
-			fiberContext.GetThreadContext()->SwitchToSchedulerFiber();
+					taskScheduler->m_TaskManager.ReleaseTaskList(taskList);
+				}
+
+				// Decrement the number of tasks executed
+				taskScheduler->m_NumPendingTasks.fetch_sub(numTasksCompleted, std::memory_order_relaxed);
+				numTasksCompleted = 0;
+			}
+			else
+			{
+				if (taskScheduler->m_NumPendingTasks == 0)
+				{
+					std::lock_guard<std::mutex> guard(taskScheduler->m_AllTasksFinishedMutex);
+					taskScheduler->m_AllTasksFinished.notify_one();
+				}
+			}
+
+			// Switch back to scheduler fiber
+			fiberContext.SetState(FiberContextState::FINISHED);
+			Fiber::SwitchTo(fiberContext.GetFiber(), fiberContext.GetThreadContext()->GetShedulerFiber());
 		}
 	}
 
@@ -171,67 +150,54 @@ namespace MGE
 		assert(taskScheduler && "TaskScheduler invalid.");
 
 		FiberContext* fiberContext = nullptr;
-		TaskDescription taskDescription;
 
 		if (taskScheduler->m_WakeupListFiberContexts.size() > 0)
 		{
-			std::lock_guard<std::mutex> guard(taskScheduler->m_WakeupListFibersMutext);
-			if (taskScheduler->m_WakeupListFiberContexts.size() > 0)
+			if (taskScheduler->m_WakeupListFiberContexts.TryPop(fiberContext))
 			{
-				fiberContext = taskScheduler->m_WakeupListFiberContexts.back();
-				taskScheduler->m_WakeupListFiberContexts.pop_back();
-
-				// Wakeup fibers already have a task bound to them.
-				taskDescription = fiberContext->taskDescription;
+				assert(fiberContext);
+				assert(fiberContext->GetState() == FiberContextState::WAITING);
+			}
+			else
+			{
+				fiberContext = nullptr;
 			}
 		}
 
 		if (fiberContext == nullptr)
 		{
-			if (taskScheduler->m_TaskDescriptionQueue.size() == 0
-				|| taskScheduler->m_AvailableFiberContexts.size() == 0)
+			// Try to get a task
+			if (taskScheduler->m_AvailableFiberContexts.size() == 0)
 			{
 				return false;
 			}
 
-			// Try to get a task
+			// Get next task
+			if (!taskScheduler->m_AvailableFiberContexts.TryPop(fiberContext))
 			{
-				std::lock_guard<std::mutex> availableFibersLock(taskScheduler->m_AvailableFibersMutext);
-				std::lock_guard<std::mutex> taskQueueLock(taskScheduler->m_TaskQueueMutext);
-
-				if (taskScheduler->m_TaskDescriptionQueue.size() == 0
-					|| taskScheduler->m_AvailableFiberContexts.size() == 0)
-				{
-					return false;
-				}
-
-				// Get next task
-				fiberContext = taskScheduler->m_AvailableFiberContexts.back();
-				taskScheduler->m_AvailableFiberContexts.pop_back();
-				taskDescription = taskScheduler->m_TaskDescriptionQueue.front();
-				taskScheduler->m_TaskDescriptionQueue.pop();
+				return false;
 			}
+
+			assert(fiberContext);
+			assert(fiberContext->GetState() == FiberContextState::IDLE);
 		}
 
 		fiberContext->SetThreadContext(&context);
-		fiberContext->taskDescription = taskDescription;
-		fiberContext->fiber.SwitchToFiber();
+		Fiber::SwitchTo(context.GetShedulerFiber(), fiberContext->GetFiber());
 
-		if (fiberContext->state == FiberContextState::FINISHED)
+		assert(fiberContext->GetState() == FiberContextState::FINISHED ||
+			fiberContext->GetState() == FiberContextState::YIELD);
+
+		if (fiberContext->GetState() == FiberContextState::FINISHED)
 		{
-			if (taskDescription.counter)
-			{
-				// If it's the last task to decrease the counter, make sure to delete the counter.
-				if (taskDescription.counter->Decrement() == 0u)
-				{
-					delete taskDescription.counter;
-				}
-			}
-
-			// Release fiber after finishing executing the task
-			std::lock_guard<std::mutex> availableFibersLock(taskScheduler->m_AvailableFibersMutext);
-			fiberContext->state = FiberContextState::IDLE;
-			taskScheduler->m_AvailableFiberContexts.push_back(fiberContext);
+			// Release fiber after finishing executing the tasks
+			fiberContext->SetState(FiberContextState::IDLE);
+			assert(taskScheduler->m_AvailableFiberContexts.TryPush(fiberContext) && "Try Push Available Fiber");
+		}
+		else if (fiberContext->GetState() == FiberContextState::YIELD)
+		{
+			fiberContext->SetState(FiberContextState::WAITING);
+			fiberContext->ReadyToWakeup();
 		}
 
 		return true;
@@ -242,16 +208,10 @@ namespace MGE
 		return m_IsWorkerThread != 0;
 	}
 
-	void TaskScheduler::MoveFiberToWaitList(FiberContext & fiberContext)
-	{
-		std::lock_guard<std::mutex> guard(m_WaitListFibersMutext);
-		m_WaitListFiberContexts.push_back(&fiberContext);
-	}
-
 	void TaskScheduler::MoveFiberToWakeupList(FiberContext& fiberContext)
 	{
-		std::lock_guard<std::mutex> guard(m_WaitListFibersMutext);
-		m_WakeupListFiberContexts.push_back(&fiberContext);
+		while (!m_WakeupListFiberContexts.TryPush(&fiberContext))
+		{
+		}
 	}
-
 }

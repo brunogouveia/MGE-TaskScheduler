@@ -1,9 +1,8 @@
 #pragma once
 
-#include "TaskDescription.h"
+#include "TaskList.h"
 #include "Fiber.h"
 
-#include <malloc.h>
 #include <stdint.h>
 
 namespace MGE
@@ -16,61 +15,54 @@ namespace MGE
 		IDLE,
 		RUNNING,
 		WAITING,
+		YIELD,
 		FINISHED
 	};
 
 	class FiberContext
 	{
 	public:
-		typedef void(*FiberEntryPoint)(void* params);
+		typedef void(*FiberFunc)(void* params);
 
 		FiberContext();
 		~FiberContext();
 
-		void CreateFiber(FiberEntryPoint fiberEntryPoint, void* parameters);
-		void CreateFromCurrentThreadAndRun(FiberEntryPoint fiberEntryPoint, void* params);
+		void CreateFiber(FiberFunc fiberFunc, void* parameters);
+		void CreateFromCurrentThreadAndRun(FiberFunc fiberFunc, void* params);
 
 		template <typename Task>
-		void RunTasks(Task* tasks, uint32_t numTasks, TaskCounter** outTaskCounter = nullptr)
+		void RunTask(Task* tasks, uint32_t numTasks, std::shared_ptr<TaskCounter>* outTaskCounter = nullptr)
 		{
-			TaskCounter* taskCounter = nullptr;
+			std::shared_ptr<TaskCounter> taskCounter = nullptr;
 			if (outTaskCounter)
 			{
-				taskCounter = (*outTaskCounter) = new TaskCounter(numTasks);
+				taskCounter = std::make_shared<TaskCounter>(numTasks);
+				(*outTaskCounter) = taskCounter;
 			}
 
-			void* test = alloca(sizeof(TaskDescription) * numTasks);
-			TaskDescription* taskDescriptions = static_cast<TaskDescription*>(test);
+			TaskList taskList(tasks, numTasks, taskCounter);
 
-			// Create task descriptions
-			for (size_t i = 0; i < numTasks; i++)
-			{
-				taskDescriptions[i] = TaskDescription{ &Task::TaskEntryPoint, &tasks[i], taskCounter };
-			}
-
-			RunTask(taskDescriptions, numTasks, taskCounter);
+			RunTaskImpl(taskList);
 		}
 
-		template <typename Task>
-		void RunTasksAndWait(Task* tasks, uint32_t numTasks)
-		{
-			TaskCounter* taskCounter;
-			RunTask(tasks, numTasks, &taskCounter);
-			WaitForCounterAndFree(taskCounter, 0);
-		}
+		void ReadyToWakeup();
+		void WaitForCounterAndFree(std::shared_ptr<TaskCounter> taskCounter, uint32_t value);
 
-		void RunTask(TaskDescription* tasks, uint32_t numTasks, TaskCounter* taskCounter);
+		Fiber& GetFiber();
 
-		void WaitForCounterAndFree(TaskCounter* taskCounter, uint32_t value);
+		FiberContextState GetState() const;
+		void SetState(FiberContextState state);
 
 		ThreadContext* GetThreadContext() const;
 		void SetThreadContext(ThreadContext* threadContext);
 
-		Fiber fiber;
-		TaskDescription taskDescription;
-		FiberContextState state = FiberContextState::IDLE;
-
 	private:
+		void RunTaskImpl(TaskList& taskList);
+
+		Fiber m_Fiber;
+		std::atomic<FiberContextState> m_State = FiberContextState::IDLE;
+
 		ThreadContext* m_ThreadContext = nullptr;
+		std::shared_ptr<TaskCounter> m_TaskCounter;
 	};
 }

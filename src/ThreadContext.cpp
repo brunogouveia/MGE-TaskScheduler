@@ -4,15 +4,22 @@ namespace MGE
 {
 	ThreadContext::ThreadContext()
 	{
-
 	}
-
 
 	ThreadContext::~ThreadContext()
 	{
-		if (m_Thread)
+		if (m_Thread == nullptr)
 		{
-			Stop();
+			return;
+		}
+
+		if (m_Thread->joinable())
+		{
+			m_Thread->join();
+		}
+		else
+		{
+			m_Thread->detach();
 		}
 	}
 
@@ -24,29 +31,7 @@ namespace MGE
 
 	void ThreadContext::Stop()
 	{
-		m_State = ThreadContextState::EXIT;
-		if (m_Thread->joinable())
-		{
-			m_Thread->join();
-		}
-		else
-		{
-			m_Thread->detach();
-		}
-
 		m_Thread.reset();
-
-		m_State = ThreadContextState::IDLE;
-	}
-
-	void ThreadContext::CreateSchedulerFiber(Fiber::FiberFunc fiberEntryPoint, void* params)
-	{
-		m_SchedulerFiberContext.CreateFromCurrentThreadAndRun(fiberEntryPoint, params);
-	}
-
-	void ThreadContext::SwitchToSchedulerFiber()
-	{
-		m_SchedulerFiberContext.fiber.SwitchToFiber();
 	}
 
 	uint32_t ThreadContext::GetThreadIndex() const
@@ -59,14 +44,9 @@ namespace MGE
 		m_ThreadIndex = index;
 	}
 
-	ThreadContextState ThreadContext::GetState() const
+	Fiber& ThreadContext::GetShedulerFiber()
 	{
-		return m_State;
-	}
-
-	void ThreadContext::SetState(ThreadContextState state)
-	{
-		m_State = state;
+		return m_SchedulerFiberContext.GetFiber();
 	}
 
 	TaskScheduler* ThreadContext::GetTaskScheduler() const
@@ -74,8 +54,18 @@ namespace MGE
 		return m_TaskScheduler;
 	}
 
-	void ThreadContext::SetTaskScheduler(TaskScheduler* taskScheduler)
+	void ThreadContext::SetTaskScheduler(TaskScheduler * taskScheduler)
 	{
 		m_TaskScheduler = taskScheduler;
+	}
+
+	ThreadContextState ThreadContext::GetState() const
+	{
+		return m_State.load(std::memory_order_relaxed);
+	}
+
+	void ThreadContext::SetState(ThreadContextState state)
+	{
+		m_State = state;
 	}
 }

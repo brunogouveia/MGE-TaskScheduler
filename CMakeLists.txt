@@ -19,14 +19,25 @@ else()
 	message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
+SET(HDRS 
+		include/Fiber.h
+		include/FiberContext.h
+		include/TaskCounter.h
+		include/TaskList.h
+		include/TaskScheduler.h
+		include/ThreadContext.h
+)
+
 SET(SRCS 
 		src/Main.cpp
 		src/Fiber.cpp
 		src/FiberContext.cpp
+		src/TaskCounter.cpp
+		src/TaskList.cpp
 		src/TaskScheduler.cpp
 		src/ThreadContext.cpp
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_executable(Sample ${SRCS})
+add_executable(Sample ${SRCS} ${HDRS})
